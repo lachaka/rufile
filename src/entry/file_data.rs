@@ -5,6 +5,7 @@ use std::time::SystemTime;
 use std::fmt::{self, Display, Formatter};
 use chrono::{DateTime, Local};
 use filemagic::{FileMagicError, magic};
+use humansize::{FileSize, file_size_opts};
 
 use super::permissions::FilePermissions;
 use super::type_parser::FileType;
@@ -15,6 +16,7 @@ pub struct FileData {
     pub file_type: FileType,
     pub permissions: FilePermissions,
     mod_time: SystemTime,
+    file_size: u64,
 }
 
 impl FileData {
@@ -23,12 +25,14 @@ impl FileData {
         let file_type = FileType::new(metadata.st_mode());
         let permissions = FilePermissions::new(metadata.st_mode());
         let mod_time = metadata.modified()?;
+        let file_size = metadata.len();
 
         Ok(FileData {
             name: entry.file_name().into_string().unwrap(),
             file_type,
             permissions,
-            mod_time
+            mod_time,
+            file_size,
         })
     }
 
@@ -61,8 +65,9 @@ impl FileData {
         }
         let mod_time: DateTime<Local> = self.mod_time.into();
 
-        format!("{}{}\n{}\n{}", self.file_type, 
+        format!("{}{}\n{}\n{}\n{}", self.file_type, 
             self.permissions,
+            self.file_size.file_size(file_size_opts::DECIMAL).unwrap(),
             mod_time.format("%b %e %T"),
             mime_type)
     }
