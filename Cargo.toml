@@ -8,4 +8,5 @@ edition = "2018"
 [dependencies]
 tui = "0.16"
 termion = "1.5"
-filemagic = "0.12.3"
+filemagic = "0.12"
+chrono = "0.4"

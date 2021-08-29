@@ -1,37 +1,35 @@
-use std::fs::{DirEntry, File};
 use std::io::{Error, prelude::*, BufReader};
+use std::fs::{DirEntry, File};
 use std::os::linux::fs::MetadataExt;
-
+use std::time::SystemTime;
+use std::fmt::{self, Display, Formatter};
+use chrono::{DateTime, Local};
 use filemagic::{FileMagicError, magic};
 
 use super::permissions::FilePermissions;
 use super::type_parser::FileType;
-
-pub enum EntryError {
-    ErrorGettingMetadata,
-}
 
 #[derive(Debug)]
 pub struct FileData {
     pub name: String,
     pub file_type: FileType,
     pub permissions: FilePermissions,
+    mod_time: SystemTime,
 }
 
 impl FileData {
-    pub fn new(entry: DirEntry) -> Result<FileData, EntryError> {
-        if let Ok(metadata) = entry.metadata() {
-            let file_type = FileType::new(metadata.st_mode());
-            let permissions = FilePermissions::new(metadata.st_mode());
-            
-            return Ok(FileData {
-                name: entry.file_name().into_string().unwrap(),
-                file_type,
-                permissions
-            });
-        }
+    pub fn new(entry: DirEntry) -> std::io::Result<FileData> {
+        let metadata = entry.metadata()?;
+        let file_type = FileType::new(metadata.st_mode());
+        let permissions = FilePermissions::new(metadata.st_mode());
+        let mod_time = metadata.modified()?;
 
-        Err(EntryError::ErrorGettingMetadata)
+        Ok(FileData {
+            name: entry.file_name().into_string().unwrap(),
+            file_type,
+            permissions,
+            mod_time
+        })
     }
 
     pub fn preview(&self) -> Result<String, Error> {
@@ -61,11 +59,13 @@ impl FileData {
         if let Ok(mtype) = self.get_mime_type() {
             mime_type = mtype;
         }
+        let mod_time: DateTime<Local> = self.mod_time.into();
 
-        format!(" {}{}\n {}", self.file_type, 
-                            self.permissions,
-                            mime_type)
-    } 
+        format!("{}{}\n{}\n{}", self.file_type, 
+            self.permissions,
+            mod_time.format("%b %e %T"),
+            mime_type)
+    }
 
     pub fn is_dir(&self) -> bool {
         self.file_type == FileType::DIR
@@ -76,3 +76,8 @@ impl FileData {
     }
 }
 
+impl Display for FileData {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}\n{}", self.name,self.info())    
+    }
+}
