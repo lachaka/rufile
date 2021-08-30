@@ -30,14 +30,17 @@ use tui::widgets::{
     Paragraph
 };
 
-mod event;
 mod entry;
+mod event;
+mod input;
 
-use event::{Event, Events};
 use entry::file_data::FileData;
+use event::{Event, Events};
+use input::{Input, InputMode};
 
 fn main() -> Result<(), Box<dyn error::Error>> {
     let events = Events::new();
+    let mut command = Input::default();
 
     let cwd = env::current_dir().unwrap();
     let mut path = cwd;
@@ -56,24 +59,12 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 .horizontal_margin(1)
                 .direction(Direction::Vertical)
                 .constraints([
-                        Constraint::Length(3),
-                        Constraint::Min(3)
+                        Constraint::Min(3),
+                        Constraint::Length(1),
                     ].as_ref()
                 )
                 .split(f.size());
             
-            let search = Paragraph::new("Search for a file")
-                .style(Style::default().fg(Color::White))
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(Color::Green))
-                        .title(Span::styled(" Search ", 
-                        Style::default().fg(Color::LightGreen)))
-                        .border_type(BorderType::Thick),
-            );
-            f.render_widget(search, chunks[0]);
-
             let main_chunks = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints(
@@ -82,7 +73,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                         Constraint::Percentage(50),
                     ].as_ref()
                 )
-                .split(chunks[1]);
+                .split(chunks[0]);
             
             let right = Layout::default()
                 .direction(Direction::Vertical)
@@ -100,42 +91,95 @@ fn main() -> Result<(), Box<dyn error::Error>> {
             f.render_stateful_widget(list, main_chunks[0], &mut file_list_state);
             f.render_widget(paragraphs.remove(1), right[1]);
             f.render_widget(paragraphs.remove(0), right[0]);
-        })?;
 
-        match events.rx.recv()? {
-            Event::Input(input) => match input {
-                Key::Char('q') | Key::Ctrl('c') => {
-                    break;
-                }
-                Key::Up => {
-                    if let Some(selected) = file_list_state.selected() {
-                        let files_count = read_dir(&path).unwrap().len(); 
-                        if selected > 0 {
-                            file_list_state.select(Some(selected - 1));
-                        } else {
-                            file_list_state.select(Some(files_count - 1));
-                        }
+            let input_chunk = Paragraph::new(match command.input_mode {
+                    InputMode::Error => {
+                        Spans::from(vec![Span::styled("Invalid command", 
+                                    Style::default()
+                                    .fg(Color::Red)
+                                    .add_modifier(Modifier::REVERSED))
+                        ])
+                    },
+                    _ => {
+                        Spans::from(command.input.as_ref())
                     }
-                }
-                Key::Down => {
-                    if let Some(selected) = file_list_state.selected() {
-                        let files_count = read_dir(&path).unwrap().len(); 
-                        if selected >= files_count - 1 {
-                            file_list_state.select(Some(0));
-                        } else {
-                            file_list_state.select(Some(selected + 1));
-                        }
-                    }
-                }
-                Key::Right => {
-                    open_file(&mut path, &mut file_list_state);
-                }
-                Key::Left => {
-                    path.pop();
-                    env::set_current_dir(&path).expect("invalid path");
-                    file_list_state.select(Some(0));
+                })
+                .style(match command.input_mode {
+                    InputMode::Error => Style::default(),
+                    _ => Style::default(),
+                })
+                .block(Block::default()
+            );
+
+            f.render_widget(input_chunk, chunks[1]);
+
+            match command.input_mode {
+                InputMode::Editing => {
+                    f.set_cursor(
+                        chunks[1].x + command.input.len() as u16,
+                        chunks[1].y,
+                    )
                 }
                 _ => {}
+            }
+        })?;
+        
+        match events.rx.recv()? {
+            Event::Input(input) => match command.input_mode {
+                InputMode::Normal | InputMode::Error => match input {
+                    Key::Char('q') | Key::Ctrl('c') => {
+                        break;
+                    } 
+                    Key::Up => {
+                        if let Some(selected) = file_list_state.selected() {
+                            let files_count = read_dir(&path).unwrap().len(); 
+                            if selected > 0 {
+                                file_list_state.select(Some(selected - 1));
+                            } else {
+                                file_list_state.select(Some(files_count - 1));
+                            }
+                        }
+                    }
+                    Key::Down => {
+                        if let Some(selected) = file_list_state.selected() {
+                            let files_count = read_dir(&path).unwrap().len(); 
+                            if selected >= files_count - 1 {
+                                file_list_state.select(Some(0));
+                            } else {
+                                file_list_state.select(Some(selected + 1));
+                            }
+                        }
+                    }
+                    Key::Right => {
+                        open_file(&mut path, &mut file_list_state);
+                    }
+                    Key::Left => {
+                        path.pop();
+                        env::set_current_dir(&path).expect("invalid path");
+                        file_list_state.select(Some(0));
+                    }
+                    Key::Char(':') => {
+                        command.input.push(':');
+                        command.input_mode = InputMode::Editing
+                    }
+                    _ => {}
+                }
+                InputMode::Editing => match input {
+                    Key::Char('\n') => {
+                        command.execute();
+                    }
+                    Key::Char(c) => {
+                        command.input.push(c);
+                    }
+                    Key::Backspace => {
+                        command.input.pop();
+                    }
+                    Key::Esc => {
+                        command.input.drain(..);
+                        command.input_mode = InputMode::Normal;
+                    }
+                    _ => {}
+                }
             },
             Event::Tick => {},
         }
@@ -228,7 +272,7 @@ fn render_info<'a>(selected_file: &FileData) -> Paragraph<'a> {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Red))
+                .border_style(Style::default().fg(Color::Green))
                 .title(" Info ")
                 .border_type(BorderType::Thick),
     )
