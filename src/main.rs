@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
 use std::{env, error, fs, io};
 use termion::event::Key;
 use termion::raw::IntoRawMode;
@@ -37,16 +39,16 @@ use entry::file_data::FileData;
 fn main() -> Result<(), Box<dyn error::Error>> {
     let events = Events::new();
 
-    let current_dir = env::current_dir().expect("always work in dir");
-    let mut path = current_dir.to_str().unwrap();
+    let cwd = env::current_dir().unwrap();
+    let mut path = cwd;
 
     let stdout = io::stdout().into_raw_mode()?;
     let stdout = AlternateScreen::from(stdout);
     let backend = TermionBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-
+    
     let mut file_list_state = ListState::default();
-    file_list_state.select(Some(3));
+    file_list_state.select(Some(0));
 
     loop {
         terminal.draw(|f| {
@@ -93,18 +95,45 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 )
                 .split(main_chunks[1]);
 
-            let (list, mut paragraphs) = render_files(&file_list_state, path);
+            let (list, mut paragraphs) = render_files(&file_list_state, &path);
         
             f.render_stateful_widget(list, main_chunks[0], &mut file_list_state);
             f.render_widget(paragraphs.remove(1), right[1]);
             f.render_widget(paragraphs.remove(0), right[0]);
-
         })?;
 
         match events.rx.recv()? {
             Event::Input(input) => match input {
                 Key::Char('q') | Key::Ctrl('c') => {
                     break;
+                }
+                Key::Up => {
+                    if let Some(selected) = file_list_state.selected() {
+                        let files_count = read_dir(&path).unwrap().len(); 
+                        if selected > 0 {
+                            file_list_state.select(Some(selected - 1));
+                        } else {
+                            file_list_state.select(Some(files_count - 1));
+                        }
+                    }
+                }
+                Key::Down => {
+                    if let Some(selected) = file_list_state.selected() {
+                        let files_count = read_dir(&path).unwrap().len(); 
+                        if selected >= files_count - 1 {
+                            file_list_state.select(Some(0));
+                        } else {
+                            file_list_state.select(Some(selected + 1));
+                        }
+                    }
+                }
+                Key::Right => {
+                    open_file(&mut path, &mut file_list_state);
+                }
+                Key::Left => {
+                    path.pop();
+                    env::set_current_dir(&path).expect("invalid path");
+                    file_list_state.select(Some(0));
                 }
                 _ => {}
             },
@@ -115,10 +144,10 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     Ok(())
 }
 
-fn read_dir(path: &str) -> Result<Vec<FileData>, io::Error> {
+fn read_dir(path: &PathBuf) -> Result<Vec<FileData>, io::Error> {
     let mut files: Vec<FileData> = Vec::<FileData>::new();
 
-    for entry in fs::read_dir(path)? {
+    for entry in fs::read_dir(&path)? {
         let entry = entry?;
         
         if let Ok(entry_data) = FileData::new(entry) {
@@ -129,10 +158,10 @@ fn read_dir(path: &str) -> Result<Vec<FileData>, io::Error> {
     Ok(files)
 }
 
-fn render_files<'a>(file_list_state: &ListState, path: &'a str) 
+fn render_files<'a>(file_list_state: &ListState, path: &PathBuf) 
         -> (List<'a>, Vec<Paragraph<'a>>) {
     
-    let title = format!(" {} ", path);
+    let title = format!(" {} ", path.to_str().unwrap());
     let files = Block::default()
         .borders(Borders::ALL)
         .style(Style::default().fg(Color::White))
@@ -140,7 +169,7 @@ fn render_files<'a>(file_list_state: &ListState, path: &'a str)
         .border_style(Style::default().fg(Color::Yellow))
         .border_type(BorderType::Thick);
 
-    let file_list = read_dir(path).expect("cannot list files");
+    let file_list = read_dir(&path).expect("cannot list files");
 
     let items: Vec<_> = file_list
         .iter()
@@ -159,7 +188,8 @@ fn render_files<'a>(file_list_state: &ListState, path: &'a str)
                 .bg(Color::Yellow)
                 .fg(Color::Black)
                 .add_modifier(Modifier::BOLD),
-        );
+        )
+        .highlight_symbol(">");
 
     let selected_file = file_list
         .get(file_list_state
@@ -168,10 +198,11 @@ fn render_files<'a>(file_list_state: &ListState, path: &'a str)
         )
         .expect("there is always selected file");
 
-        let mut res = vec!();
-        res.push(render_preview(selected_file));
-        res.push(render_info(selected_file));
-    (list, res)
+    let mut paragraphs = vec!();
+    paragraphs.push(render_preview(selected_file));
+    paragraphs.push(render_info(selected_file));
+
+    (list, paragraphs)
 }
 
 fn render_preview<'a>(selected_file: &FileData) -> Paragraph<'a> {
@@ -201,4 +232,27 @@ fn render_info<'a>(selected_file: &FileData) -> Paragraph<'a> {
                 .title(" Info ")
                 .border_type(BorderType::Thick),
     )
+}
+
+fn open_file(path: &mut PathBuf, selected_file: &mut ListState) {
+    if let Ok(files) = read_dir(&path) {
+        if let Some(selected) = selected_file.selected() {
+            let file = &files[selected];
+            if file.is_file() {
+                path.push(&file.name);
+                Command::new("xdg-open")
+                    .arg(&file.name)
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .expect("failed opening file");
+                path.pop();
+            } else if file.is_dir() {
+                path.push(&file.name);
+
+                let files = read_dir(path).expect("files not loaded");
+                selected_file.select(if files.len() > 0 {Some(0)} else {None});
+                env::set_current_dir(&path).expect("invalid path");
+            }
+        }
+    }
 }

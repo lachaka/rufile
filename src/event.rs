@@ -25,9 +25,7 @@ pub struct Events {
 
 impl Events {
     pub fn new() -> Events {
-   
         Events::from_config(EventConfig::default())
-       
     }
 
     fn from_config(config: EventConfig) -> Events {

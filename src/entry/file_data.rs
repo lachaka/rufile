@@ -1,4 +1,4 @@
-use std::io::{Error, prelude::*, BufReader};
+use std::io::{BufReader, Error, prelude::*};
 use std::fs::{DirEntry, File};
 use std::os::linux::fs::MetadataExt;
 use std::time::SystemTime;
@@ -13,8 +13,8 @@ use super::type_parser::FileType;
 #[derive(Debug)]
 pub struct FileData {
     pub name: String,
-    pub file_type: FileType,
-    pub permissions: FilePermissions,
+    file_type: FileType,
+    permissions: FilePermissions,
     mod_time: SystemTime,
     file_size: u64,
 }
@@ -24,37 +24,40 @@ impl FileData {
         let metadata = entry.metadata()?;
         let file_type = FileType::new(metadata.st_mode());
         let permissions = FilePermissions::new(metadata.st_mode());
-        let mod_time = metadata.modified()?;
-        let file_size = metadata.len();
-
+        
         Ok(FileData {
             name: entry.file_name().into_string().unwrap(),
             file_type,
             permissions,
-            mod_time,
-            file_size,
+            mod_time: metadata.modified()?,
+            file_size: metadata.len(),
         })
     }
 
     pub fn preview(&self) -> Result<String, Error> {
         let file = File::open(&self.name)?;
-
-        if self.is_dir() {
-            return Ok(" ".to_string());
-        }
-        let head: String = BufReader::new(file)
+        let lines = BufReader::new(&file)
             .lines()
-            .take(10)
-            .map(|l| l.unwrap() + "\n")
-            .collect();
-
-        Ok(head)
+            .take(10);
+            
+        let mut head: Vec<String> = Vec::with_capacity(10);
+        
+        for line in lines {
+            if let Ok(line) = line {
+                head.push(line);
+            } else {
+                return Ok("".to_string());
+            }
+        }
+            
+        Ok(head.join("\n"))
     }
 
     pub fn get_mime_type(&self) -> Result<String, FileMagicError> {
+        let file = &self.name;
         let magic = magic!().expect("error");
   
-        magic.file(&self.name)
+        magic.file(file)
     }
 
     pub fn info(&self) -> String {
