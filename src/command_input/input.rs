@@ -53,7 +53,7 @@ impl CommandHandler {
 
         let op = command[0].chars().nth(1).unwrap();
 
-        if file_name.is_none() && op != 'n' {
+        if file_name.is_none() && op != 'n' && op != 'p' {
             self.input_mode = InputMode::Error;
             self.input.drain(..);
             return;
@@ -63,7 +63,7 @@ impl CommandHandler {
             Ok(()) => {
                 let mut arguments: Vec<&str> = vec![];
                 
-                if op != 'n' {
+                if op != 'n' && op != 'p' {
                     arguments.push(file_name.unwrap());
                 }
 

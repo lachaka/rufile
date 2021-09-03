@@ -29,8 +29,28 @@ impl OperationExecutor {
         self.last_op_file_path.is_file()
     }
 
+    fn copy_recursively(&self, src: &Path, dst: &Path) -> io::Result<()> {
+        fs::create_dir_all(&dst)?;
+        for entry in fs::read_dir(src)? {
+            let entry = entry?;
+            let ty = entry.file_type()?;
+            if ty.is_dir() {
+                self.copy_recursively(&entry.path(), &dst.join(entry.file_name()))?;
+            } else {
+                fs::copy(entry.path(), dst.join(entry.file_name()))?;
+            }
+        }
+
+        Ok(())
+    }
+
     fn copy_dir(&self, _dir_name: &OsStr) -> io::Result<()> {
-        todo!()
+        let mut dst = env::current_dir()?;
+        dst.push(self.last_op_file_path.file_name().unwrap());
+
+        self.copy_recursively(&self.last_op_file_path, &dst)?;
+
+        Ok(())
     }
 
     fn copy_file(&self, file_name: &OsStr) -> io::Result<()> {
@@ -92,8 +112,6 @@ impl OperationExecutor {
         } else { // directory
             fs::remove_dir_all(&file_name)?;
         }
-          
-        self.last_operation = 'd';
 
         Ok(())
     }
@@ -103,8 +121,6 @@ impl OperationExecutor {
         let new_name = args[1];
 
         fs::rename(file_name, new_name)?;
-
-        self.last_operation = 'r';
 
         Ok(())
     }
@@ -118,8 +134,6 @@ impl OperationExecutor {
             fs::File::create(file_name)?;
         }
 
-        self.last_operation = 'n';
-
         Ok(())
     }
 
@@ -127,8 +141,6 @@ impl OperationExecutor {
         let file_name = args[0];
         let modes = u32::from_str_radix(args[1], 8).unwrap();
         fs::set_permissions(file_name, fs::Permissions::from_mode(modes))?;
-
-        self.last_operation = 'e';
 
         Ok(())
     }
