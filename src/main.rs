@@ -32,18 +32,17 @@ use tui::widgets::{
 
 mod entry;
 mod event;
-mod input;
+mod command_input;
 
 use entry::file_data::FileData;
 use event::{Event, Events};
-use input::{Input, InputMode};
+use command_input::input::{CommandHandler, InputMode};
 
 fn main() -> Result<(), Box<dyn error::Error>> {
     let events = Events::new();
-    let mut command = Input::default();
+    let mut command = CommandHandler::default();
 
-    let cwd = env::current_dir().unwrap();
-    let mut path = cwd;
+    let mut path = env::current_dir().unwrap();
 
     let stdout = io::stdout().into_raw_mode()?;
     let stdout = AlternateScreen::from(stdout);
@@ -166,7 +165,15 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 }
                 InputMode::Editing => match input {
                     Key::Char('\n') => {
-                        command.execute();
+                       match file_list_state.selected() {
+                           Some(selected) => {
+                                let files = read_dir(&path);
+                                if let Ok(files) = files {
+                                    command.exec(Some(&files[selected].name));
+                                } 
+                            }
+                            None => command.exec(None) 
+                       }
                     }
                     Key::Char(c) => {
                         command.input.push(c);
@@ -205,7 +212,7 @@ fn read_dir(path: &PathBuf) -> Result<Vec<FileData>, io::Error> {
 fn render_files<'a>(file_list_state: &ListState, path: &PathBuf) 
         -> (List<'a>, Vec<Paragraph<'a>>) {
     
-    let title = format!(" {} ", path.to_str().unwrap());
+    let title = format!(" {} ", path.to_string_lossy());
     let files = Block::default()
         .borders(Borders::ALL)
         .style(Style::default().fg(Color::White))
@@ -234,13 +241,11 @@ fn render_files<'a>(file_list_state: &ListState, path: &PathBuf)
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(">");
-
-    let selected_file = file_list
-        .get(file_list_state
-            .selected()
-            .expect("file not selected"),
-        )
-        .expect("there is always selected file");
+    
+    let mut selected_file: Option<&FileData>  = None;  
+    if let Some(idx) = file_list_state.selected() {
+        selected_file = file_list.get(idx);
+    }
 
     let mut paragraphs = vec!();
     paragraphs.push(render_preview(selected_file));
@@ -249,10 +254,12 @@ fn render_files<'a>(file_list_state: &ListState, path: &PathBuf)
     (list, paragraphs)
 }
 
-fn render_preview<'a>(selected_file: &FileData) -> Paragraph<'a> {
+fn render_preview<'a>(selected_file: Option<&FileData>) -> Paragraph<'a> {
     let mut preview = String::from("");
-    if let Ok(text) = selected_file.preview() {
-        preview = text;
+    if let Some(file) = selected_file {
+        if let Ok(text) = file.preview() {
+            preview = text;
+        }
     }
 
     Paragraph::new(preview)
@@ -266,8 +273,13 @@ fn render_preview<'a>(selected_file: &FileData) -> Paragraph<'a> {
     )
 }
 
-fn render_info<'a>(selected_file: &FileData) -> Paragraph<'a> {
-    Paragraph::new(selected_file.info())
+fn render_info<'a>(selected_file: Option<&FileData>) -> Paragraph<'a> {
+    let mut info = String::from("");
+    if let Some(file) = selected_file {
+        info = file.info();
+    }
+
+    Paragraph::new(info)
         .style(Style::default().fg(Color::White))
         .block(
             Block::default()
