@@ -117,7 +117,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                     Key::Left => on_left_pressed(&mut path, &mut marked_file),
                     Key::Char(':') => {
                         command.input.push(':');
-                        command.input_mode = InputMode::Editing
+                        command.input_mode = InputMode::Editing;
                     }
                     _ => {}
                 }
@@ -242,9 +242,7 @@ fn render_input_field(command: &CommandHandler) -> Paragraph {
                         .add_modifier(Modifier::REVERSED))
             ])
         },
-        _ => {
-            Spans::from(command.input.as_ref())
-        }
+        _ => Spans::from(command.input.as_ref())
     };
 
     Paragraph::new(text)
@@ -289,7 +287,6 @@ fn open_dir(path: &mut PathBuf, marked_file: &mut ListState) -> io::Result<()> {
 
     Ok(())
 }
-
 
 fn on_right_pressed(path: &mut PathBuf, marked_file: &mut ListState) {
     if let Ok(files) = read_dir(&path) {
@@ -338,11 +335,11 @@ fn on_down_pressed(path: &PathBuf, marked_file: &mut ListState) {
 fn call_command(command: &mut CommandHandler, path: &PathBuf, marked_file: &ListState) {
     match marked_file.selected() {
         Some(selected) => {
-             let files = read_dir(&path);
-             if let Ok(files) = files {
+            let files = read_dir(&path);
+            if let Ok(files) = files {
                 command.exec(Some(&files[selected].name));
-             } 
-         }
-         None => command.exec(None) 
+            } 
+        }
+        None => command.exec(None) 
     }
 }

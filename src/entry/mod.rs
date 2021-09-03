@@ -1,4 +1,4 @@
 pub mod file_data;
 
-mod permissions;
-mod type_parser;
+pub mod permissions;
+pub mod type_parser;

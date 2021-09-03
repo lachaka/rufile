@@ -3,7 +3,7 @@ use std::io;
 
 use super::operations::OperationExecutor;
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum InputMode {
     Editing,
     Normal,
@@ -51,6 +51,12 @@ impl CommandHandler {
             .split_ascii_whitespace()
             .collect();
 
+        if command[0].len() != 2 {
+            self.input_mode = InputMode::Error;
+            self.input.drain(..);
+            return;
+        }
+
         let op = command[0].chars().nth(1).unwrap();
 
         if file_name.is_none() && op != 'n' && op != 'p' {
@@ -92,7 +98,7 @@ impl CommandHandler {
         }
 
         for p in perms.chars() {
-            if p > '7' && p < '0' {
+            if p > '7' || p < '0' {
                 return Err(OperationError::InvalidArgument);
             }
         }

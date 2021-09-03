@@ -6,7 +6,7 @@ pub struct FilePermissions {
 }
 
 impl FilePermissions {
-    pub fn new(file: u32) -> Self {
+    pub fn new(file: u32) -> FilePermissions {
         let mut perms: [char; 9] = ['-'; 9];
 
         let mut x: usize = 0;
