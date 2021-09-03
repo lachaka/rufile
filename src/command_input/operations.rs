@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
+use std::os::unix::fs::PermissionsExt;
 
 pub struct OperationExecutor {
     last_operation: char,
@@ -118,6 +119,16 @@ impl OperationExecutor {
         }
 
         self.last_operation = 'n';
+
+        Ok(())
+    }
+
+    pub fn edit(&mut self, args: Vec<&str>) -> io::Result<()> {
+        let file_name = args[0];
+        let modes = u32::from_str_radix(args[1], 8).unwrap();
+        fs::set_permissions(file_name, fs::Permissions::from_mode(modes))?;
+
+        self.last_operation = 'e';
 
         Ok(())
     }

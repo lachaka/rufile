@@ -30,6 +30,7 @@ impl Default for CommandHandler {
         let mut ops: HashMap<char, Operation> = HashMap::new();
         ops.insert('c', OperationExecutor::copy);
         ops.insert('d', OperationExecutor::delete);
+        ops.insert('e', OperationExecutor::edit);
         ops.insert('m', OperationExecutor::cut);
         ops.insert('n', OperationExecutor::create);
         ops.insert('p', OperationExecutor::paste);
@@ -85,6 +86,20 @@ impl CommandHandler {
         self.input.drain(..);
     }
 
+    fn validate_permissions(&self, perms: &str) -> Result<(), OperationError> {
+        if perms.len() != 3 {
+            return Err(OperationError::InvalidArgument);
+        }
+
+        for p in perms.chars() {
+            if p > '7' && p < '0' {
+                return Err(OperationError::InvalidArgument);
+            }
+        }
+
+        Ok(())
+    }
+
     fn validate_input(&self, command: &Vec<&str>) -> Result<(), OperationError> {
         let operation = command[0].chars().nth(1).unwrap();
         if !self.operations.contains_key(&operation) {
@@ -101,13 +116,17 @@ impl CommandHandler {
                 if command.len() != 2 {
                     return Err(OperationError::WrongArgumentCount);
                 }
+
+                if operation == 'e' {
+                    return self.validate_permissions(command[1]);
+                }
             }
             'n' => {
                 if command.len() != 3 {
                     return Err(OperationError::WrongArgumentCount);
                 }
                 if command[1] != "d" && command[1] != "f" {
-                    return Err(OperationError::WrongArgumentCount);
+                    return Err(OperationError::InvalidArgument);
                 }
             }
             _ => {
