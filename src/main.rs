@@ -177,9 +177,15 @@ fn render_file_list<'a>(path: &PathBuf, files: &Vec<FileData>) -> List<'a> {
     let items: Vec<_> = files
         .iter()
         .map(|file| {
+            let mut file_name = file.name.clone();
+            let mut file_color = Style::default();
+            if file.is_dir() {
+                file_name.push('/');
+                file_color = file_color.fg(Color::Blue);
+            }
             ListItem::new(Spans::from(vec![Span::styled(
-                file.name.clone(),
-                Style::default(),
+                file_name,
+                file_color,
             )]))
         })
         .collect();
