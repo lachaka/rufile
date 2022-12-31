@@ -5,7 +5,7 @@ use std::time::SystemTime;
 use std::fmt::{self, Display, Formatter};
 use chrono::{DateTime, Local};
 use filemagic::{FileMagicError, magic};
-use humansize::{FileSize, file_size_opts};
+use humansize::{format_size, DECIMAL};
 
 use super::permissions::FilePermissions;
 use super::type_parser::FileType;
@@ -70,7 +70,7 @@ impl FileData {
 
         format!("{}{}\n{}\n{}\n{}", self.file_type, 
             self.permissions,
-            self.file_size.file_size(file_size_opts::DECIMAL).unwrap(),
+            format_size(self.file_size, DECIMAL),
             mod_time.format("%b %e %T"),
             mime_type)
     }
