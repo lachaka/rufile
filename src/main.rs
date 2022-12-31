@@ -4,10 +4,10 @@ use std::{env, error, fs, io};
 
 use termion::event::Key;
 use termion::raw::IntoRawMode;
-use termion::screen::AlternateScreen;
-
 use tui::Terminal;
-use tui::backend::TermionBackend;
+use termion::screen::IntoAlternateScreen;
+
+use tui::backend::CrosstermBackend;
 use tui::layout::{
     Constraint,
     Direction,
@@ -46,8 +46,8 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let mut path: PathBuf = env::current_dir().unwrap();
 
     let stdout = io::stdout().into_raw_mode()?;
-    let stdout = AlternateScreen::from(stdout);
-    let backend = TermionBackend::new(stdout);
+    let stdout = stdout.into_alternate_screen()?;
+    let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     
     let mut marked_file = ListState::default();
